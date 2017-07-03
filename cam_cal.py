@@ -62,6 +62,7 @@ cv2.imwrite('camera_cal/calibration1_undist.jpg', dst)
 dist_pickle = {}
 dist_pickle["mtx"] = mtx
 dist_pickle["dist"] = dist
+# write calibration results to the pickle file
 pickle.dump( dist_pickle, open( "camera_cal/calibration_pickle.p", "wb" ) )
 #dst = cv2.cvtColor(dst, cv2.COLOR_BGR2RGB)
 # Visualize undistortion
@@ -70,4 +71,5 @@ ax1.imshow(img)
 ax1.set_title('Original Image', fontsize=30)
 ax2.imshow(dst)
 ax2.set_title('Undistorted Image', fontsize=30)
+plt.show()
 cv2.waitKey(500)
