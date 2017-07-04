@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import glob
 import pickle
-#from tracker import tracker
+from tracker import tracker
 
 
 # Read in the saved object points and image points
@@ -100,10 +100,15 @@ def color_threshold(image, sthresh=(0, 255), vthresh=(0, 255)):
     binary_output[(s_binary == 1) & (v_binary == 1)] = 1
     return binary_output
 
-def window_mask(width, height, img_ref, center, level):
+# WindowMask is a function to draw window areas
+def windowMask(width, height, img_ref, center, level):
     output = np.zeros_like(img_ref)
     output[int(img_ref.shape[0]-(level+1)*height):int(img_ref.shape[0]-level*height),max(0,int(center-width))]
 
+def window_mask(width, height, img_ref, center, level):
+    output = np.zeros_like(img_ref)
+    output[int(img_ref.shape[0]-(level+1)*height):int(img_ref.shape[0]-level*height),max(0,int(center-width/2)):min(int(center+width/2),img_ref.shape[1])] = 1
+    return output
 
 # Make a list of test images
 images = glob.glob('./test_images/test*.jpg')
@@ -121,11 +126,11 @@ for idx, fname in enumerate(images):
     gradx = abs_sobel_thresh(img, orient='x', sobel_kernel=ksize, thresh=(30, 80)) #12 255
     grady = abs_sobel_thresh(img, orient='y', sobel_kernel=ksize, thresh=(20, 100)) #25 255
     # color threshold
-    c_binary = color_threshold(img, sthresh=(100, 255), vthresh=(50, 255))
+    colorbinary = color_threshold(img, sthresh=(100, 255), vthresh=(50, 255))
     # combine the gradient and color thresholds
     preprocessImage = np.zeros_like(img[:,:,0])
     # set the indexed pixels to 255 because we store a jpg (no png)
-    preprocessImage[((gradx == 1) & (grady == 1)) | (c_binary == 1)] = 255
+    preprocessImage[((gradx == 1) & (grady == 1)) | (colorbinary == 1)] = 255
 
 
     # perspective transform
@@ -155,16 +160,113 @@ for idx, fname in enumerate(images):
 
     # Given src and dst points, calculate the perspective transform matrix
     M = cv2.getPerspectiveTransform(src, dst)
+    Minv = cv2.getPerspectiveTransform(dst, src)
     # Warp the image using OpenCV warpPerspective()
     warped = cv2.warpPerspective(preprocessImage, M, img_size)
 
+    # Define the sliding window size
+    windowWidth = 25
+    windowHeight = 80
+    margin = 25
 
-    histogram = np.sum(warped[img.shape[0]//2:,:], axis=0)
-    plt.plot(histogram)
+    # create an instance of the tracker class with pixel conversion ym and xm to the real world space
+    # this is use to measure the curvature. It defines a ratio (10 meters corresponds to 720 pixels
+    # and 4 meters corresponds to 384 pixels)
+    curveCenters = tracker(m_windowWidth = windowWidth, m_windowHeight = windowHeight, m_margin = margin, m_ym = 10/720, m_xm = 4/1280, m_smoothFactor = 15)
+
+
+
+    # call the tracking function itself
+    windowCentroids = curveCenters.findWindowCentroids(warped)
+
+    print(windowCentroids)
+
+    # draw the found left and right center points
+    # If we found any window centers
+    if len(windowCentroids) > 0:
+
+        # Points used to draw all the left and right windows
+        lPoints = np.zeros_like(warped)
+        rPoints = np.zeros_like(warped)
+
+        # Points used to find the left and right lanes
+        leftx = []
+        rightx = []
+
+        # Go through each level and draw the windows
+        for level in range(0,len(windowCentroids)):
+            # add found window values
+            leftx.append(windowCentroids[level][0])
+            rightx.append(windowCentroids[level][1])
+            # WindowMask is a function to draw window areas
+            lMask = window_mask(windowWidth, windowHeight, warped, windowCentroids[level][0], level)
+            rMask = window_mask(windowWidth, windowHeight, warped, windowCentroids[level][1], level)
+            # Add graphic points from window mask here to total pixels found
+            lPoints[(lPoints == 255) | ((lMask == 1) ) ] = 255
+            rPoints[(rPoints == 255) | ((rMask == 1) ) ] = 255
+
+        # Draw the results
+        # add both left and right window pixels together
+        template = np.array(rPoints + lPoints, np.uint8)
+        # create a zero color channel
+        zeroChannel = np.zeros_like(template)
+        # make window pixels green (other channels are black = red and blue)
+        template = np.array(cv2.merge((zeroChannel, template, zeroChannel)), np.uint8)
+        # making the original road pixels 3 color channels
+        warpage = np.array(cv2.merge((warped, warped, warped)), np.uint8)
+        # overlay the orignal road image with window results
+        # (100 percent for the warpage image and 50 percent for the green windows)
+        result = cv2.addWeighted(warpage, 1, template, 0.5, 0.0)
+
+    # If no window centers found, just display orginal road image
+    #else:
+    #    result = np.array(cv2.merge((warped, warped, warped)),np.uint8)
+
+    # fit the lane boundaries to the left, right center positions found
+    yvals = range(0, warped.shape[0])
+
+    resYvals = np.arange(warped.shape[0] - (windowHeight/2), 0, -windowHeight)
+
+    # find the polynomial coefficients of degree 2 polynomial
+    # a*x^2 + b*x + c
+    leftFit = np.polyfit(resYvals, leftx, 2)
+    leftFitx = leftFit[0]*yvals*yvals + leftFit[1]*yvals + leftFit[2]
+    leftFitx = np.array(leftFitx, np.int32)
+
+    rightFit = np.polyfit(resYvals, rightx, 2)
+    rightFitx = rightFit[0]*yvals*yvals + rightFit[1]*yvals + rightFit[2]
+    rightFitx = np.array(rightFitx, np.int32)
+
+    # fancy array magic to encapsulate the list values
+    leftLane = np.array(list(zip(np.concatenate((leftFitx - windowWidth/2, leftFitx[::-1]+windowWidth/2), axis=0), np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
+    rightLane = np.array(list(zip(np.concatenate((rightFitx - windowWidth/2, rightFitx[::-1]+windowWidth/2), axis=0), np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
+    middleMarker = np.array(list(zip(np.concatenate((rightFitx - windowWidth/2, rightFitx[::-1]+windowWidth/2), axis=0), np.concatenate((yvals, yvals[::-1]), axis=0))), np.int32)
+
+    road = np.zeros_like(img)
+    roadBkg = np.zeros_like(img)
+    cv2.fillPoly(road, [leftLane], color=[255, 0, 0])
+    cv2.fillPoly(road, [rightLane], color=[0, 0, 255])
+    cv2.fillPoly(roadBkg, [leftLane], color=[255, 255, 255])
+    cv2.fillPoly(roadBkg, [rightLane], color=[255, 255, 255])
+
+
+    # transform the warped lines back to the original image
+    roadWarped = cv2.warpPerspective(road, Minv, img_size, flags=cv2.INTER_LINEAR)
+    roadWarpedBkg = cv2.warpPerspective(roadBkg, Minv, img_size, flags=cv2.INTER_LINEAR)
+
+    base = cv2.addWeighted(img, 1.0, roadWarpedBkg, -1.0, 0.0)
+    result = cv2.addWeighted(base, 1.0, roadWarped, 1.0, 0.0)
+
+    # Display the final results
+    plt.imshow(result)
+    plt.title('window fitting results')
     plt.show()
 
+    #histogram = np.sum(warped[img.shape[0]//2:,:], axis=0)
+    #plt.plot(histogram)
+    #plt.show()
+
     # write the undistored images
-    result = warped
     write_name = './test_images/tracked'+str(idx)+'.jpg'
     cv2.imwrite(write_name, result)
 
