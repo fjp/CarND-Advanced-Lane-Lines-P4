@@ -257,6 +257,28 @@ for idx, fname in enumerate(images):
     base = cv2.addWeighted(img, 1.0, roadWarpedBkg, -1.0, 0.0)
     result = cv2.addWeighted(base, 1.0, roadWarped, 1.0, 0.0)
 
+    # meters per pixel in y dimension
+    ymPerPixel = curveCenters.ymPerPixel
+    # meters per pixel in x dimension
+    xmPerPixel = curveCenters.ymPerPixel
+
+    # get curvature in meters
+    # tutorial: http://www.intmath.com/applications-differentiation/8-radius-curvature.php
+    curveFitCr = np.polyfit(np.array(resYvals, np.float32)*ymPerPixel, np.array(leftx, np.float32)*xmPerPixel, 2)
+    # for the curvature radius only the left line is checked (Todo: averaging of both lines)
+    curverad = ((1 + (2*curveFitCr[0]*yvals[-1]*ymPerPixel + curveFitCr[1])**2)**1.5) / np.absolute(2*curveFitCr[0])
+
+    # calculate the offset of the car on the road
+    cameraCenter = (leftFitx[-1] + rightFitx[-1])/2
+    centerDiff = (cameraCenter - warped.shape[1]/2)*xmPerPixel
+    sidePos = 'left'
+    if centerDiff <= 0:
+        sidePos = 'right'
+
+    # draw the text showing curvature, offset and speed
+    cv2.putText(result, 'Radius of curvature = ' + str(round(curverad,3))+'(m)', (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    cv2.putText(result, 'Vehicle is ' + str(round(centerDiff,3))+' m' + sidePos + ' of center', (50,100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
     # Display the final results
     plt.imshow(result)
     plt.title('window fitting results')
