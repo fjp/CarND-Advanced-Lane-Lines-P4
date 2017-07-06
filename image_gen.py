@@ -132,6 +132,9 @@ for idx, fname in enumerate(images):
     # set the indexed pixels to 255 because we store a jpg (no png)
     preprocessImage[((gradx == 1) & (grady == 1)) | (colorbinary == 1)] = 255
 
+    # write the undistored images
+    write_name = './test_images/binary'+str(idx)+'.jpg'
+    cv2.imwrite(write_name, preprocessImage)
 
     # perspective transform
     # define perspective transform area (trapezoid)
@@ -150,19 +153,33 @@ for idx, fname in enumerate(images):
     # four destination points
     dst = np.float32([[offset, 0],[img_size[0]-offset, 0],[img_size[0]-offset, img_size[1]],[offset, img_size[1]]])
 
-    # DEBUG show the produced vertices
-    #vertices_src = np.array([[(img.shape[1]*(mid_top-mid_width/2), img.shape[0]*height_pct),(img.shape[1]*(mid_top+mid_width/2), img.shape[0]*height_pct), (img.shape[1]*(mid_bot+bot_width/2), img.shape[0]*bottom_trim), (img.shape[1]*(mid_bot-bot_width/2), img.shape[0]*bottom_trim)]], dtype=np.int32)
-    #vertices_dst = np.array([[(offset, 0),(img_size[0]-offset, 0), (img_size[0]-offset, img_size[1]), (offset, img_size[1])]], dtype=np.int32)
-    #image_roi = np.copy(img)
-    #cv2.polylines(image_roi, vertices_dst, 1, (255, 0, 0), thickness=3)
-    #plt.imshow(image_roi)
-    #plt.show()
 
     # Given src and dst points, calculate the perspective transform matrix
     M = cv2.getPerspectiveTransform(src, dst)
     Minv = cv2.getPerspectiveTransform(dst, src)
     # Warp the image using OpenCV warpPerspective()
     warped = cv2.warpPerspective(preprocessImage, M, img_size)
+
+    # DEBUG show the produced vertices
+    vertices_src = np.array([[(img.shape[1]*(mid_top-mid_width/2), img.shape[0]*height_pct),(img.shape[1]*(mid_top+mid_width/2), img.shape[0]*height_pct), (img.shape[1]*(mid_bot+bot_width/2), img.shape[0]*bottom_trim), (img.shape[1]*(mid_bot-bot_width/2), img.shape[0]*bottom_trim)]], dtype=np.int32)
+    vertices_dst = np.array([[(offset, 0),(img_size[0]-offset, 0), (img_size[0]-offset, img_size[1]), (offset, img_size[1])]], dtype=np.int32)
+    image_roi = np.copy(img)
+    image_roi_warped = np.copy(warped)
+    cv2.polylines(image_roi, vertices_src, 1, (255, 0, 0), thickness=3)
+    cv2.polylines(image_roi_warped, vertices_dst, 1, (255, 0, 0), thickness=3)
+    #plt.imshow(image_roi)
+    #plt.show()
+
+    # # Plot the result
+    f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
+    f.tight_layout()
+    ax1.imshow(image_roi)
+    ax1.set_title('Original Image', fontsize=50)
+    ax2.imshow(image_roi_warped)
+    ax2.set_title('Transformed Image', fontsize=50)
+    plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
+    plt.savefig('perspective_transform.jpg', bbox_inches='tight')
+    plt.show()
 
     # Define the sliding window size
     windowWidth = 25
@@ -224,7 +241,7 @@ for idx, fname in enumerate(images):
 
     # fit the lane boundaries to the left, right center positions found
     yvals = range(0, warped.shape[0])
-
+    # define a range of y values from top to bottom (used to fit a 2nd order polynomial)
     resYvals = np.arange(warped.shape[0] - (windowHeight/2), 0, -windowHeight)
 
     # find the polynomial coefficients of degree 2 polynomial
@@ -277,7 +294,7 @@ for idx, fname in enumerate(images):
 
     # draw the text showing curvature, offset and speed
     cv2.putText(result, 'Radius of curvature = ' + str(round(curverad,3))+'(m)', (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    cv2.putText(result, 'Vehicle is ' + str(round(centerDiff,3))+' m' + sidePos + ' of center', (50,100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    cv2.putText(result, 'Vehicle is ' + str(round(centerDiff,3))+' m ' + sidePos + ' of center', (50,100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
     # Display the final results
     plt.imshow(result)

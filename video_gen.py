@@ -171,7 +171,6 @@ def processImage(img):
     curveCenters = tracker(m_windowWidth = windowWidth, m_windowHeight = windowHeight, m_margin = margin, m_ym = 10/720, m_xm = 4/1280, m_smoothFactor = 15)
 
 
-
     # call the tracking function itself
     windowCentroids = curveCenters.findWindowCentroids(warped)
 
@@ -274,7 +273,7 @@ def processImage(img):
 
     # draw the text showing curvature, offset and speed
     cv2.putText(result, 'Radius of curvature = ' + str(round(curverad,3))+'(m)', (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    cv2.putText(result, 'Vehicle is ' + str(round(centerDiff,3))+' m' + sidePos + ' of center', (50,100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    cv2.putText(result, 'Vehicle is ' + str(round(centerDiff,3))+' m ' + sidePos + ' of center', (50,100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
     return result
 
